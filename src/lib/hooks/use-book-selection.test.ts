@@ -10,13 +10,17 @@ vi.mock("@/stores/edit-books/store", () => ({
 
 import type { LibraryBook } from "@/bindings";
 import { BOOK_COMMAND } from "@/lib/book-menu";
-import { emptySelection } from "@/lib/book-selection";
+import { emptySelection, selectAll } from "@/lib/book-selection";
 import { none } from "@/lib/option";
 import type { PlatformAdapter } from "@/lib/platform/types";
 import type { Library } from "@/lib/services/library";
 import { useBookSelectionStore } from "@/stores/book-selection/store";
 import { useLibraryStore } from "@/stores/library/store";
-import { type BookCommandDeps, bookCommands } from "./use-book-selection";
+import {
+	type BookCommandDeps,
+	bookCommands,
+	resolveSelectedBooks,
+} from "./use-book-selection";
 
 const book = (id: string) => ({ id, title: `Book ${id}` }) as LibraryBook;
 const BOOKS = [book("1"), book("2")];
@@ -78,5 +82,27 @@ describe("bookCommands: Edit", () => {
 		await flush();
 		expect(deps.editBook).toHaveBeenCalledWith(BOOKS[1]);
 		expect(mocks.requestBooksEdit).not.toHaveBeenCalled();
+	});
+});
+
+describe("resolveSelectedBooks", () => {
+	it("refuses a selection whose books did not all load", async () => {
+		// No library is open, so the missing pages cannot load.
+		useLibraryStore.setState({
+			library: null,
+			bookCache: {
+				key: "k",
+				generation: 0,
+				total: 300,
+				pages: new Map([[0, [book("b0")]]]),
+				stale: new Set(),
+			},
+			staleBookSnapshot: null,
+		});
+		useBookSelectionStore.setState({ selection: selectAll(emptySelection) });
+
+		await expect(resolveSelectedBooks()).rejects.toThrow(
+			"Some of the selected books did not load, so nothing changed.",
+		);
 	});
 });
