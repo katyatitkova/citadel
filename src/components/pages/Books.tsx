@@ -143,6 +143,7 @@ export const Books = ({
 			tagId: tag_id ?? null,
 			publisherId: publisher_id ?? null,
 			hideRead,
+			searchScope: "titlesAuthorsSeries",
 			sortOrder,
 		}),
 		[
