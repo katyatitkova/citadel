@@ -20,7 +20,11 @@ export { LoadingOverlay, type LoadingOverlayProps } from "./LoadingOverlay";
 export { NoBreak } from "./NoBreak";
 export { ProgressBar, type ProgressBarProps } from "./ProgressBar";
 export { keepOpenForList } from "./popover-interop";
-export { SearchField, type SearchFieldProps } from "./SearchField";
+export {
+	SearchField,
+	type SearchFieldMessage,
+	type SearchFieldProps,
+} from "./SearchField";
 export {
 	SegmentedControl,
 	type SegmentedControlItem,
