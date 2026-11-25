@@ -40,6 +40,7 @@ impl<'a> LibraryService<'a> {
             .transpose()?;
         let page = self.library.query_books(libcalibre::BookQuery {
             text: query.text,
+            search_scope: libcalibre::SearchScope::TitlesAuthorsSeries,
             author_id,
             series_id: query.series_id,
             tag_id: query.tag_id,
