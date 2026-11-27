@@ -1,7 +1,7 @@
 use citadel_core::{
     contracts::{
-        BookEdit, BookSortOrder, BookUpdate, EditBooksOutcome, LibraryBookQuery,
-        LibrarySearchHint, SearchScope,
+        BookEdit, BookSortOrder, BookUpdate, EditBooksOutcome, LibraryBookQuery, LibrarySearchHint,
+        SearchScope,
     },
     error::LibraryErrorCode,
     library::LibraryService,
@@ -99,6 +99,7 @@ fn second_book(
                 language: None,
                 file_paths: vec![source],
             },
+            None,
         )
         .unwrap()
 }
