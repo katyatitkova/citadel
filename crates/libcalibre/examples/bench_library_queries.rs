@@ -683,7 +683,10 @@ fn run() -> Result<(), String> {
             must_find: false,
         },
     ];
-    for (label, token) in [("non-ASCII", &non_ascii_token), ("Cyrillic", &cyrillic_token)] {
+    for (label, token) in [
+        ("non-ASCII", &non_ascii_token),
+        ("Cyrillic", &cyrillic_token),
+    ] {
         match token {
             Some(token) => scenarios.push(Scenario {
                 name: format!("query_books: text search {label} ('{token}')"),
