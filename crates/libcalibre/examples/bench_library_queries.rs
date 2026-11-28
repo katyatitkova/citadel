@@ -224,7 +224,8 @@ const OPERATOR_WORDS: [&str; 3] = ["and", "or", "not"];
 
 /// Most/least frequent title tokens. Used to pick a "common" and a "rare"
 /// search needle without hardcoding the generator's vocabulary. A token is in
-/// ASCII lower case, because SQLite LIKE folds only ASCII letters.
+/// ASCII lower case, so that the search must fold the case of a capitalized
+/// word.
 fn pick_search_tokens(conn: &mut SqliteConnection) -> Result<(String, String), String> {
     let titles: Vec<TitleRow> = sql_query("SELECT title FROM books")
         .load(conn)
@@ -687,7 +688,7 @@ fn run() -> Result<(), String> {
             Some(token) => scenarios.push(Scenario {
                 name: format!("query_books: text search {label} ('{token}')"),
                 query: search_query(token.clone(), DEFAULT),
-                must_find: false,
+                must_find: true,
             }),
             None => println!("(no {label} title; skipping the {label} search)"),
         }

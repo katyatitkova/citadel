@@ -7,8 +7,8 @@ use common::setup_with_library;
 use diesel::sql_types::Integer;
 use diesel::{sql_query, RunQueryDsl};
 use libcalibre::{
-    BookAdd, BookPage, BookQuery, BookSortOrder, CalibreError, CustomValueFilter, Library,
-    SearchError, SearchScope, Spanned,
+    BookAdd, BookPage, BookQuery, BookSortOrder, BookUpdate, CalibreError, CustomValueFilter,
+    Library, SearchError, SearchScope, Spanned,
 };
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -113,6 +113,179 @@ fn test_search_escapes_like_wildcards() {
     let results = lib.search_books("0% D").unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "100% Done");
+}
+
+/// The titles that `search_books` finds for `text`, sorted.
+fn search_titles(lib: &mut Library, text: &str) -> Vec<String> {
+    let mut titles: Vec<String> = lib
+        .search_books(text)
+        .unwrap()
+        .into_iter()
+        .map(|book| book.title)
+        .collect();
+    titles.sort();
+    titles
+}
+
+fn add_titles(lib: &mut Library, titles: &[&str]) {
+    for title in titles {
+        lib.add_book(book_with_authors(title, &[])).unwrap();
+    }
+}
+
+#[test]
+fn test_search_cyrillic_title_ignores_case() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["Война и мир", "Анна Каренина"]);
+
+    assert_eq!(search_titles(&mut lib, "война"), ["Война и мир"]);
+}
+
+#[test]
+fn test_search_cyrillic_author_and_series_ignore_case() {
+    let (_temp, mut lib) = setup_with_library();
+    lib.add_book(BookAdd {
+        series: Some("Сказки".to_string()),
+        series_index: Some(1.0),
+        ..book_with_authors("Детство", &["Лев Толстой"])
+    })
+    .unwrap();
+    add_titles(&mut lib, &["Unrelated Book"]);
+
+    assert_eq!(search_titles(&mut lib, "толстой"), ["Детство"]);
+    assert_eq!(search_titles(&mut lib, "сказки"), ["Детство"]);
+}
+
+#[test]
+fn test_search_greek_ignores_case_and_final_sigma() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["ΟΔΥΣΣΕΎΣ", "Unrelated Book"]);
+
+    // The final sigma "ς" folds to "σ", the same as the capital "Σ".
+    assert_eq!(search_titles(&mut lib, "οδυσσεύς"), ["ΟΔΥΣΣΕΎΣ"]);
+}
+
+#[test]
+fn test_search_uppercase_query_finds_lowercase_title() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["мой толстой", "Unrelated Book"]);
+
+    assert_eq!(search_titles(&mut lib, "ТОЛСТОЙ"), ["мой толстой"]);
+}
+
+#[test]
+fn test_search_yo_matches_ye() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["Всё", "Все", "Другое"]);
+
+    assert_eq!(search_titles(&mut lib, "всё"), ["Все", "Всё"]);
+    assert_eq!(search_titles(&mut lib, "все"), ["Все", "Всё"]);
+}
+
+#[test]
+fn test_search_nfc_query_finds_nfd_title() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["Rene\u{0301}e", "Unrelated Book"]);
+
+    assert_eq!(search_titles(&mut lib, "Ren\u{00E9}e"), ["Rene\u{0301}e"]);
+}
+
+#[test]
+fn test_search_matches_any_combining_mark_order() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["Vi\u{1EC7}t Nam", "Unrelated Book"]);
+
+    // U+0302 before U+0323 is not the canonical order, which puts U+0323
+    // (dot below) first. NFC reorders the marks.
+    assert_eq!(
+        search_titles(&mut lib, "vie\u{0302}\u{0323}t"),
+        ["Vi\u{1EC7}t Nam"]
+    );
+}
+
+#[test]
+fn test_search_keeps_accents_significant() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["García Márquez"]);
+
+    assert!(search_titles(&mut lib, "garcia").is_empty());
+    assert_eq!(search_titles(&mut lib, "garcía"), ["García Márquez"]);
+}
+
+#[test]
+fn test_search_sharp_s_matches_ss() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["STRASSE", "Straße", "Unrelated Book"]);
+
+    assert_eq!(search_titles(&mut lib, "straße"), ["STRASSE", "Straße"]);
+    assert_eq!(search_titles(&mut lib, "strasse"), ["STRASSE", "Straße"]);
+}
+
+#[test]
+fn test_search_escapes_wildcards_in_non_ascii_text() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(&mut lib, &["100% Правда", "1000 Правда"]);
+
+    assert_eq!(search_titles(&mut lib, "100% правда"), ["100% Правда"]);
+}
+
+#[test]
+fn test_query_books_total_matches_items_for_non_ascii() {
+    let (_temp, mut lib) = setup_with_library();
+    add_titles(
+        &mut lib,
+        &[
+            "Война и мир",
+            "мой толстой",
+            "Всё",
+            "Все",
+            "STRASSE",
+            "Straße",
+            "100% Правда",
+            "1000 Правда",
+        ],
+    );
+
+    for text in ["война", "ТОЛСТОЙ", "всё", "straße", "100% правда"] {
+        let page = lib
+            .query_books(BookQuery {
+                text: Some(text.to_string()),
+                ..BookQuery::default()
+            })
+            .unwrap();
+        assert!(page.total > 0, "{text} must match a book");
+        assert_eq!(page.items.len() as u64, page.total, "{text}");
+    }
+}
+
+#[test]
+fn test_schema_never_refers_to_casefold() {
+    let (_temp, mut lib) = setup_with_library();
+    let book = lib
+        .add_book(BookAdd {
+            tags: Some(vec!["Фэнтези".to_string()]),
+            ..book_with_authors("Война и мир", &["Лев Толстой"])
+        })
+        .unwrap();
+    assert_eq!(search_titles(&mut lib, "война"), ["Война и мир"]);
+    lib.update_book(
+        book.id,
+        BookUpdate {
+            tags: Some(vec!["фэнтези".to_string(), "Сказки".to_string()]),
+            ..BookUpdate::default()
+        },
+    )
+    .unwrap();
+
+    let conn = rusqlite::Connection::open(lib.database_path()).unwrap();
+    let references: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE sql LIKE '%casefold%'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(references, 0);
 }
 
 #[test]
@@ -456,6 +629,29 @@ fn non_ascii_values_find_books() {
     let found = hints(&mut lib, "título:x", ALL);
     assert_eq!(found.len(), 1);
     assert!(found[0].contains("título"));
+}
+
+#[test]
+fn field_terms_fold_the_unicode_case() {
+    let (_temp, mut lib) = setup_with_library();
+    lib.add_book(BookAdd {
+        tags: Some(vec!["Фэнтези".to_string()]),
+        publisher: Some("Издательство Ёж".to_string()),
+        ..book_with_authors("Война и мир", &["Лев Толстой"])
+    })
+    .unwrap();
+    lib.add_book(book_with_authors("Unrelated Book", &[]))
+        .unwrap();
+
+    assert_eq!(titles(&mut lib, "tags:фэнтези", DEFAULT), ["Война и мир"]);
+    assert_eq!(titles(&mut lib, "фэнтези", ALL), ["Война и мир"]);
+    assert_eq!(titles(&mut lib, "publisher:еж", DEFAULT), ["Война и мир"]);
+    assert_eq!(titles(&mut lib, "tags:=фэнтези", DEFAULT), ["Война и мир"]);
+    assert_eq!(
+        titles(&mut lib, "title:\"=война и мир\"", DEFAULT),
+        ["Война и мир"]
+    );
+    assert!(titles(&mut lib, "title:=война", DEFAULT).is_empty());
 }
 
 #[test]
@@ -819,13 +1015,10 @@ fn a_comment_of_spaces_only_is_no_comment() {
 }
 
 #[test]
-fn case_folding_is_ascii_only() {
+fn case_folding_covers_non_ascii_letters() {
     let (_temp, mut lib) = fixture();
     assert_eq!(titles(&mut lib, "CIEN", DEFAULT), ["Cien años de soledad"]);
-    assert!(
-        titles(&mut lib, "AÑOS", DEFAULT).is_empty(),
-        "SQLite LIKE folds ASCII letters only"
-    );
+    assert_eq!(titles(&mut lib, "AÑOS", DEFAULT), ["Cien años de soledad"]);
 }
 
 #[test]

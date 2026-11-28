@@ -282,7 +282,9 @@ pub struct BookQuery {
     /// escaped — the same language as [`Library::search_books`], EXCEPT that
     /// `None` or empty/whitespace text matches ALL books (where
     /// `search_books` returns no books). Text that does not parse or is not
-    /// supported gives [`CalibreError::InvalidSearch`].
+    /// supported gives [`CalibreError::InvalidSearch`]. The case folding is
+    /// the Unicode full case folding, so "толстой" matches "Толстой". Accents
+    /// stay significant, except that "ё" matches "е".
     pub text: Option<String>,
     /// The fields that a bare word searches. A field prefix works the same in
     /// each scope.
@@ -1450,13 +1452,14 @@ impl Library {
     }
 
     /// Every book that matches the search text `query`,
-    /// case-insensitively, sorted by title. A bare word matches the title,
-    /// author names and series name. The README of this crate describes the
-    /// search language. An empty or blank query returns no books; see
-    /// [`BookQuery::text`]. Text that does not parse or is not supported gives
-    /// [`CalibreError::InvalidSearch`], with a range that counts from the start
-    /// of `query`. This method drops the hints about the search text.
-    /// [`Library::query_books`] returns them.
+    /// case-insensitively, sorted by title. The case folding is the Unicode
+    /// full case folding. Accents stay significant, except that "ё" matches
+    /// "е". A bare word matches the title, author names and series name. The
+    /// README of this crate describes the search language. An empty or blank
+    /// query returns no books; see [`BookQuery::text`]. Text that does not
+    /// parse or is not supported gives [`CalibreError::InvalidSearch`], with a
+    /// range that counts from the start of `query`. This method drops the
+    /// hints about the search text. [`Library::query_books`] returns them.
     pub fn search_books(&mut self, query: &str) -> Result<Vec<Book>, CalibreError> {
         if query.trim().is_empty() {
             return Ok(vec![]);

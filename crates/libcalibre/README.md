@@ -168,7 +168,7 @@ fn main() -> Result<(), CalibreError> {
 - After a field prefix, the values `true` and `false` test for a value or for no value. A bare `true` is text.
 - Terms combine with `and`, `or` and `not`, and parentheses make groups. Two terms with no operator between them combine with `and`. `and` has a higher priority than `or`, thus `a or b c` means `a or (b and c)`.
 - A quoted phrase keeps its spaces. A backslash makes the next character plain text, for example `\"` or `\:`.
-- The case folding is for ASCII letters only.
+- The case folding is Unicode's, so "толстой" finds "Толстой" and "straße" finds "STRASSE". Accents stay significant, as in Calibre's default search, but "ё" matches "е", because Russian text often writes "е" in place of "ё".
 - A prefix that is not a field name, for example `titel:dune`, is plain text, and `BookPage::hints` gives a hint for it. A prefix with no value that is not a supported field name is plain text too, for example the `Wars:` of `Star Wars: A New Hope`. It gets a hint when it is one edit from a field name or an alias of four or more letters, for example `titel: dune`.
 - A supported field name with no value, for example `title: dune` or `tags:`, gives `SearchError::MissingValue`.
 - A Calibre field or a Calibre search kind that the search language cannot apply, for example `rating:>4` or a `~` regular expression, is an error.

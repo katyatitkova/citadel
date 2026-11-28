@@ -3,6 +3,7 @@
 
 use super::parser::{Expr, Field, Matcher, Term, TextMatch};
 use super::SearchScope;
+use crate::casefold;
 use crate::queries::books::{like_pattern, SqlFragment};
 
 /// The place that a field takes its values from.
@@ -81,16 +82,18 @@ fn source(field: Field) -> Source {
 }
 
 /// Write the comparison of a column with a text. The value goes into the
-/// binds.
+/// binds. Both sides get the search fold of [`casefold::fold`], so that the
+/// comparison ignores the Unicode case.
 fn compare(column: &str, text: &TextMatch) -> SqlFragment {
     match text {
         TextMatch::Contains(value) => SqlFragment::new(
-            format!("{column} LIKE ? ESCAPE '\\'"),
-            vec![like_pattern(value)],
+            format!("casefold({column}) LIKE ? ESCAPE '\\'"),
+            vec![like_pattern(&casefold::fold(value))],
         ),
-        TextMatch::Equals(value) => {
-            SqlFragment::new(format!("{column} = ? COLLATE NOCASE"), vec![value.clone()])
-        }
+        TextMatch::Equals(value) => SqlFragment::new(
+            format!("casefold({column}) = ?"),
+            vec![casefold::fold(value)],
+        ),
     }
 }
 
