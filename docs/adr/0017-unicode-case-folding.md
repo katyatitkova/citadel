@@ -21,7 +21,7 @@ Calibre opens the same `metadata.db`. A fix must not change the schema, and must
 
 ## Consequences
 
-- A lowercase word in any script finds a capitalized title, author name or series name. This is true in the desktop app, the web app, OPDS search and the smart shelves.
+- A lowercase word in any script finds a capitalized title, author name or series name. This is true in the desktop app, the web app, OPDS search and the smart shelves. The fold applies to each comparison of the search language of ADR 0016, thus also to a field prefix, to the `AllFields` scope and to an `=` match.
 - "всё" and "все" find each other in the search, and a lookup for "ежик" links an existing "Ёжик".
 - A search can find more books than before, thus a smart shelf can show more books than before.
 - On a book, a user cannot add two tags, authors, series, publishers or custom column values that differ only in letter case, in any script. Libraries that already hold such pairs keep them. The authors page can still add an author that differs from an existing author only in non-ASCII case, because `Library::add_author` does no lookup.

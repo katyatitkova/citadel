@@ -1,6 +1,6 @@
 # 16. Search grammar is a subset of the Calibre search language
 
-Status: Accepted - 2026-11-27.
+Status: Accepted - 2026-11-27. Case folding amended by ADR 0017: the search folds the Unicode case.
 
 ## Context
 
