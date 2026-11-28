@@ -263,6 +263,42 @@ fn pick_search_tokens(conn: &mut SqliteConnection) -> Result<(String, String), S
     Ok((common, rare))
 }
 
+/// The first word with a non-ASCII character in the titles, in id order and
+/// in lower case, so that a case-folding search must match its capitalized
+/// form. `None` when every title is ASCII.
+fn pick_non_ascii_token(conn: &mut SqliteConnection) -> Result<Option<String>, String> {
+    pick_title_word(conn, "Non-ASCII", |word| !word.is_ascii())
+}
+
+/// The same as [`pick_non_ascii_token`], for the first word with a Cyrillic
+/// letter.
+fn pick_cyrillic_token(conn: &mut SqliteConnection) -> Result<Option<String>, String> {
+    pick_title_word(conn, "Cyrillic", |word| {
+        word.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c))
+    })
+}
+
+fn pick_title_word(
+    conn: &mut SqliteConnection,
+    label: &str,
+    wanted: impl Fn(&str) -> bool,
+) -> Result<Option<String>, String> {
+    let titles: Vec<TitleRow> = sql_query("SELECT title FROM books ORDER BY id")
+        .load(conn)
+        .map_err(|e| format!("title query failed: {e}"))?;
+    let Some(token) = titles.iter().find_map(|row| {
+        row.title
+            .split_whitespace()
+            .map(|word| word.trim_matches(|c: char| c.is_ascii_punctuation()))
+            .find(|word| word.chars().count() >= 3 && wanted(word))
+    }) else {
+        return Ok(None);
+    };
+    let token = token.to_lowercase();
+    println!("{label} search needle: '{token}'");
+    Ok(Some(token))
+}
+
 /// The most linked value of a link table, with its book count. `None` when
 /// the table has no rows.
 fn most_linked(
@@ -544,6 +580,8 @@ fn run() -> Result<(), String> {
     }
 
     let (common_token, rare_token) = pick_search_tokens(&mut raw_conn)?;
+    let non_ascii_token = pick_non_ascii_token(&mut raw_conn)?;
+    let cyrillic_token = pick_cyrillic_token(&mut raw_conn)?;
     let (prolific_author, author_books) =
         most_linked(&mut raw_conn, "books_authors_link", "author")?
             .ok_or("no books_authors_link rows")?;
@@ -644,6 +682,16 @@ fn run() -> Result<(), String> {
             must_find: false,
         },
     ];
+    for (label, token) in [("non-ASCII", &non_ascii_token), ("Cyrillic", &cyrillic_token)] {
+        match token {
+            Some(token) => scenarios.push(Scenario {
+                name: format!("query_books: text search {label} ('{token}')"),
+                query: search_query(token.clone(), DEFAULT),
+                must_find: false,
+            }),
+            None => println!("(no {label} title; skipping the {label} search)"),
+        }
+    }
     if let Some(term) = &busy_tag_term {
         scenarios.push(Scenario {
             name: format!("query_books: tag term ('{term}')"),
